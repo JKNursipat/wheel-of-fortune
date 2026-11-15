@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Колесо удачи</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one centred column. The wheel is the hero; the full prize list with
+   chances sits underneath so every client sees what can be won before spinning. */
+:root{
+  --bg:#0f2a24;
+  --panel:#163a32;
+  --fg:#f4ead3;
+  --muted:#a9bfb5;
+  --accent:#e0a93b;
+  --accent-ink:#1b1408;
+  --line:#2d5a4f;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  min-height:100%;
+  background:var(--bg);
+  color:var(--fg);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:16px;
+  line-height:1.5;
+  padding-block:28px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+h1,h2{font-family:Unbounded,system-ui,sans-serif;text-wrap:balance;margin:0;line-height:1.2}
+.wrap{max-width:460px;margin-inline:auto;display:flex;flex-direction:column;gap:22px}
+header{text-align:center;display:flex;flex-direction:column;gap:8px}
+.kicker{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+h1{font-size:30px}
+.lead{margin:0;color:var(--muted)}
+
+.stage{position:relative;width:100%;max-width:400px;margin-inline:auto}
+.pointer{
+  position:absolute;left:50%;top:-6px;transform:translateX(-50%);z-index:2;
+  width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;
+  border-top:30px solid var(--accent);filter:drop-shadow(0 2px 2px rgba(0,0,0,.4));
+}
+#wheel{display:block;width:100%;height:auto;aspect-ratio:1/1;max-width:100%}
+
+.btn{
+  appearance:none;border:0;cursor:pointer;width:100%;
+  padding:16px 20px;border-radius:999px;
+  background:var(--accent);color:var(--accent-ink);
+  font:700 17px/1 Inter,system-ui,sans-serif;letter-spacing:.02em;
+  box-shadow:0 6px 0 #9a6f1e;
+  transition:transform .08s ease,box-shadow .08s ease,opacity .2s;
+}
+.btn:hover:not(:disabled){transform:translateY(-1px)}
+.btn:active:not(:disabled){transform:translateY(4px);box-shadow:0 2px 0 #9a6f1e}
+.btn:disabled{opacity:.5;cursor:default;box-shadow:none}
+.btn:focus-visible{outline:3px solid var(--fg);outline-offset:3px}
+
+.result{
+  background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;
+  display:none;flex-direction:column;gap:8px;text-align:center;
+}
+.result.show{display:flex}
+.result .label{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.result .prize{font-family:Unbounded,system-ui,sans-serif;font-size:24px;font-weight:800;color:var(--accent);text-wrap:balance}
+.result .desc{color:var(--fg)}
+.result .code{margin-top:6px;font-variant-numeric:tabular-nums;font-size:15px;letter-spacing:.2em;font-weight:600;
+  background:var(--bg);border-radius:10px;padding:10px;user-select:all}
+.result .note{font-size:14px;color:var(--muted)}
+
+.prizes{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px 18px 8px}
+.prizes h2{font-size:17px;margin-bottom:10px}
+.prize-row{display:grid;grid-template-columns:14px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.prize-row:first-of-type{border-top:0}
+.chip{width:14px;height:14px;border-radius:50%}
+.prize-row .name{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.prize-row .sub{display:block;font-size:14px;font-weight:400;color:var(--muted)}
+.prize-row .chance{font-variant-numeric:tabular-nums;font-weight:600;color:var(--accent);white-space:nowrap}
+.fine{font-size:13px;color:var(--muted);margin:0 0 10px}
+
+@media (prefers-reduced-motion:reduce){.btn{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Розыгрыш призов</div>
+    <h1>Колесо удачи</h1>
+    <p class="lead">Крутите колесо и узнайте, какой подарок вам достанется.</p>
+  </header>
+
+  <div class="stage">
+    <div class="pointer" aria-hidden="true"></div>
+    <canvas id="wheel" width="800" height="800" role="img" aria-label="Колесо с призами"></canvas>
+  </div>
+
+  <button id="spin" class="btn" type="button">Крутить колесо</button>
+
+  <section id="result" class="result" aria-live="polite">
+    <div class="label">Ваш приз</div>
+    <div id="prize" class="prize"></div>
+    <div id="desc" class="desc"></div>
+    <div class="code" id="code"></div>
+    <div class="note">Покажите этот экран администратору и назовите код, чтобы получить приз.</div>
+  </section>
+
+  <section class="prizes" aria-labelledby="plist">
+    <h2 id="plist">Что можно выиграть</h2>
+    <p class="fine">Шанс указан для каждого приза. Сектор на колесе соответствует шансу.</p>
+    <div id="list"></div>
+  </section>
+</div>
+
+<script>
+// ---- Призы. Меняйте названия, описания и шансы здесь. Сумма шансов не обязана быть 100. ----
+const PRIZES = [
+  { name: "Скидка 10%",            short: "Скидка 10%",   desc: "На следующую покупку",           weight: 30, color: "#e0a93b" },
+  { name: "Кофе в подарок",        short: "Кофе",         desc: "Одна чашка на выбор",            weight: 20, color: "#2f6b5e" },
+  { name: "Скидка 20%",            short: "Скидка 20%",   desc: "На следующую покупку",           weight: 15, color: "#e9dcc0" },
+  { name: "Фирменный подарок",     short: "Подарок",      desc: "Сувенир от нас",                 weight: 10, color: "#8c3b2e" },
+  { name: "Сертификат 5 000 ₸",    short: "5 000 ₸",      desc: "Сертификат на любую покупку",    weight: 5,  color: "#3f7d6f" },
+  { name: "Главный приз 50 000 ₸", short: "50 000 ₸",     desc: "Сертификат на 50 000 ₸",         weight: 2,  color: "#f4ead3" },
+  { name: "В следующий раз",       short: "Ещё раз",      desc: "Повезёт в следующий раз",        weight: 18, color: "#1d4a40" },
+];
+
+// Сколько раз одно устройство может крутить колесо.
+const MAX_SPINS = 1;
+const STORE_KEY = "wheel-of-fortune-v1";
+const SPIN_MS = 5200;
+
+// ---- Элементы ----
+const canvas = document.getElementById("wheel");
+const ctx = canvas.getContext("2d");
+const btn = document.getElementById("spin");
+const resultBox = document.getElementById("result");
+const prizeEl = document.getElementById("prize");
+const descEl = document.getElementById("desc");
+const codeEl = document.getElementById("code");
+const listEl = document.getElementById("list");
+
+const TOTAL = PRIZES.reduce((s, p) => s + p.weight, 0);
+const TAU = Math.PI * 2;
+const POINTER = -Math.PI / 2; // указатель смотрит вверх
+let rotation = 0;
+let busy = false;
+
+// ---- Хранилище (необязательно; при ошибке просто работаем без него) ----
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || { spins: [] }; }
+  catch (e) { return { spins: [] }; }
+}
+function saveState(state) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+// ---- Отрисовка колеса ----
+function textColorFor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#1b1408" : "#f4ead3";
+}
+
+function drawWheel(rot) {
+  const size = canvas.width;
+  const c = size / 2;
+  const R = c - 8;
+  ctx.clearRect(0, 0, size, size);
+
+  // внешний ободок
+  ctx.beginPath();
+  ctx.arc(c, c, R + 8, 0, TAU);
+  ctx.fillStyle = "#c8962e";
+  ctx.fill();
+
+  let start = 0;
+  PRIZES.forEach((p) => {
+    const a = (p.weight / TOTAL) * TAU;
+    const from = rot + start;
+    const to = from + a;
+
+    ctx.beginPath();
+    ctx.moveTo(c, c);
+    ctx.arc(c, c, R, from, to);
+    ctx.closePath();
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#0f2a24";
+    ctx.stroke();
+
+    // подпись только там, где сектор достаточно широкий
+    if (p.weight >= 8) {
+      ctx.save();
+      ctx.translate(c, c);
+      ctx.rotate(from + a / 2);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = textColorFor(p.color);
+      ctx.font = "700 30px Inter, system-ui, sans-serif";
+      ctx.fillText(p.short, R - 34, 0);
+      ctx.restore();
+    }
+    start += a;
+  });
+
+  // центр
+  ctx.beginPath();
+  ctx.arc(c, c, 52, 0, TAU);
+  ctx.fillStyle = "#0f2a24";
+  ctx.fill();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "#e0a93b";
+  ctx.stroke();
+}
+
+// ---- Список призов с шансами ----
+function renderList() {
+  listEl.innerHTML = "";
+  PRIZES.forEach((p) => {
+    const row = document.createElement("div");
+    row.className = "prize-row";
+
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.style.background = p.color;
+
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = p.name;
+    const sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = p.desc;
+    name.appendChild(sub);
+
+    const chance = document.createElement("div");
+    chance.className = "chance";
+    chance.textContent = Math.round((p.weight / TOTAL) * 1000) / 10 + "%";
+
+    row.append(chip, name, chance);
+    listEl.appendChild(row);
+  });
+}
+
+// ---- Выбор приза (взвешенный случайный) ----
+function pickIndex() {
+  let r = Math.random() * TOTAL;
+  for (let i = 0; i < PRIZES.length; i++) {
+    if (r < PRIZES[i].weight) return i;
+    r -= PRIZES[i].weight;
+  }
+  return PRIZES.length - 1;
+}
+
+function makeCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 8; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return s.slice(0, 4) + "-" + s.slice(4);
+}
+
+function showResult(entry) {
+  const p = PRIZES[entry.index] || PRIZES[PRIZES.length - 1];
+  prizeEl.textContent = p.name;
+  descEl.textContent = p.desc;
+  codeEl.textContent = "Код: " + entry.code;
+  resultBox.classList.add("show");
+}
+
+// ---- Вращение: колесо останавливается так, что указатель попадает в выбранный сектор ----
+function spinTo(index) {
+  let start = 0;
+  for (let i = 0; i < index; i++) start += (PRIZES[i].weight / TOTAL) * TAU;
+  const a = (PRIZES[index].weight / TOTAL) * TAU;
+  // небольшой случайный сдвиг внутри сектора, чтобы не всегда останавливался по центру
+  const jitter = (Math.random() - 0.5) * a * 0.6;
+  const mid = start + a / 2 + jitter;
+
+  // нужный угол поворота по модулю 2π
+  const want = POINTER - mid;
+  const current = ((rotation % TAU) + TAU) % TAU;
+  let delta = ((want - current) % TAU + TAU) % TAU;
+  const target = rotation + 6 * TAU + delta; // несколько полных оборотов для эффекта
+
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const duration = reduce ? 300 : SPIN_MS;
+  const from = rotation;
+  const t0 = performance.now();
+
+  function frame(now) {
+    const t = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - t, 4); // замедление к концу
+    rotation = from + (target - from) * eased;
+    drawWheel(rotation);
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      rotation = target;
+      drawWheel(rotation);
+      finish(index);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function finish(index) {
+  const state = loadState();
+  const entry = { index, prize: PRIZES[index].name, code: makeCode(), at: new Date().toISOString() };
+  state.spins.push(entry);
+  saveState(state);
+  showResult(entry);
+  busy = false;
+  updateButton();
+}
+
+function updateButton() {
+  const used = loadState().spins.length;
+  if (busy) {
+    btn.disabled = true;
+    btn.textContent = "Колесо крутится…";
+  } else if (used >= MAX_SPINS) {
+    btn.disabled = true;
+    btn.textContent = "Вы уже крутили колесо";
+  } else {
+    btn.disabled = false;
+    btn.textContent = "Крутить колесо";
+  }
+}
+
+btn.addEventListener("click", () => {
+  if (busy) return;
+  const state = loadState();
+  if (state.spins.length >= MAX_SPINS) {
+    showResult(state.spins[state.spins.length - 1]);
+    updateButton();
+    return;
+  }
+  busy = true;
+  resultBox.classList.remove("show");
+  updateButton();
+  spinTo(pickIndex());
+});
+
+// ---- Старт ----
+renderList();
+drawWheel(rotation);
+(function init() {
+  const state = loadState();
+  if (state.spins.length) showResult(state.spins[state.spins.length - 1]);
+  updateButton();
+})();
+</script>
+</body>
+</html>
